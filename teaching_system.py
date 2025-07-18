@@ -4,7 +4,8 @@
 """
 import os
 import json
-from typing import List, Dict, Tuple
+import re
+from typing import List, Dict, Tuple, Optional, Any
 from langchain.schema import HumanMessage, SystemMessage
 from database import DatabaseManager
 from llm_config import LLMProvider, LLMConfig, get_llm_by_name
@@ -36,6 +37,30 @@ class IntelligentTutoringSystem:
         
         # 初始化数据库
         self.db = DatabaseManager()
+        
+        # 辅助函数：处理LLM返回的可能包含Markdown代码块的JSON字符串
+        def parse_llm_json_response(response_content: str) -> Optional[Any]:
+            """解析LLM返回的可能包含Markdown代码块的JSON字符串"""
+            response_content = response_content.strip()
+            
+            # 处理可能带有Markdown代码块标记的JSON
+            if response_content.startswith('```json'):
+                # 移除```json和```标记
+                response_content = response_content.replace('```json', '', 1)
+                if response_content.endswith('```'):
+                    response_content = response_content[:-3]
+                response_content = response_content.strip()
+            # 处理只有```而没有json标识符的情况
+            elif response_content.startswith('```') and response_content.endswith('```'):
+                response_content = response_content[3:-3].strip()
+            
+            try:
+                return json.loads(response_content)
+            except json.JSONDecodeError:
+                return None
+        
+        # 将辅助函数添加为实例方法
+        self.parse_llm_json_response = parse_llm_json_response
         
         # 系统提示词模板
         self.system_prompts = {
@@ -108,7 +133,10 @@ class IntelligentTutoringSystem:
         try:
             response = self.llm.invoke(messages)
             # 解析JSON响应
-            question_data = json.loads(response.content)
+            question_data = self.parse_llm_json_response(response.content)
+            if question_data is None:
+                print("生成题目时出错: 返回内容不是有效的JSON格式")
+                return None
             return question_data
         except Exception as e:
             print(f"生成题目时出错: {e}")
@@ -133,8 +161,18 @@ class IntelligentTutoringSystem:
         
         try:
             response = self.llm.invoke(messages)
-            # 解析JSON响应
-            grading_result = json.loads(response.content)
+            grading_result = self.parse_llm_json_response(response.content)
+            
+            # 检查是否成功解析为JSON
+            if grading_result is None:
+                print(f"阅卷返回的内容不是有效的JSON格式")
+                return {
+                    "score": 0,
+                    "analysis": "评分系统出错：返回内容格式不正确",
+                    "weak_points": [],
+                    "suggestions": "请重新提交答案",
+                    "correct_answer": standard_answer
+                }
             return grading_result
         except Exception as e:
             print(f"阅卷时出错: {e}")
@@ -236,25 +274,43 @@ class IntelligentTutoringSystem:
                 question_data['knowledge_points']
             )
             
-            score = grading_result['score']
-            total_score += score
-            
-            # 保存答案记录
-            self.db.save_answer(
-                exam_id,
-                question_data['id'],
-                student_answer,
-                score,
-                grading_result['analysis'],
-                grading_result['weak_points']
-            )
-            
-            # 显示即时反馈
-            print(f"得分：{score}/10")
-            print(f"分析：{grading_result['analysis']}")
-            
-            if grading_result['weak_points']:
-                print(f"薄弱点：{', '.join(grading_result['weak_points'])}")
+            # 确保grading_result包含所有必要的键
+            if grading_result and isinstance(grading_result, dict):
+                score = grading_result.get('score', 0)
+                analysis = grading_result.get('analysis', '无分析')
+                weak_points = grading_result.get('weak_points', [])
+                
+                total_score += score
+                
+                # 保存答案记录
+                self.db.save_answer(
+                    exam_id,
+                    question_data['id'],
+                    student_answer,
+                    score,
+                    analysis,
+                    weak_points
+                )
+                
+                # 显示即时反馈
+                print(f"得分：{score}/10")
+                print(f"分析：{analysis}")
+                
+                if weak_points:
+                    print(f"薄弱点：{', '.join(weak_points)}")
+            else:
+                print("评分系统返回了无效的结果")
+                # 使用默认值
+                self.db.save_answer(
+                    exam_id,
+                    question_data['id'],
+                    student_answer,
+                    0,
+                    "评分系统出错",
+                    []
+                )
+                print("得分：0/10")
+                print("分析：评分系统出错")
             
             print("-" * 50)
         
