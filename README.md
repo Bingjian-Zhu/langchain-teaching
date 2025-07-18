@@ -45,7 +45,9 @@
 
 1. **克隆项目**
 ```bash
-cd /Users/zbj/go/src/zhubingjian/langchain/langchain-qwen3
+# 项目地址
+git clone https://github.com/Bingjian-Zhu/langchain-teaching.git
+cd langchain-teaching
 ```
 
 2. **安装依赖**
