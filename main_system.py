@@ -27,7 +27,19 @@ def setup_api_keys_and_model():
     else:
         available_models.append('qwen3')
     
-    # 检查Gemini
+    # 检查国内Gemini
+    if not api_status.get('gemini_openai', False):
+        if not os.environ.get("GOOGLE_API_KEY"):
+            choice = input("是否设置 Gemini API密钥? (y/n): ").strip().lower()
+            if choice == 'y':
+                api_key = getpass.getpass("请输入Google API密钥: ")
+                if api_key.strip():
+                    os.environ["GOOGLE_API_KEY"] = api_key.strip()
+                    available_models.append('gemini_openai')
+    else:
+        available_models.append('gemini_openai')
+
+    # 检查海外Gemini
     if not api_status.get('gemini', False):
         if not os.environ.get("GOOGLE_API_KEY"):
             choice = input("是否设置 Gemini API密钥? (y/n): ").strip().lower()

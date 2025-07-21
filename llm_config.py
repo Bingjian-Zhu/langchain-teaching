@@ -11,6 +11,9 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 class LLMProvider(Enum):
     """支持的LLM提供商"""
     QWEN3 = "qwen3"
+    # 国内Gemini
+    GEMINI_OPENAI = "gemini_openai"
+    # 海外Gemini
     GEMINI = "gemini"
 
 class LLMConfig:
@@ -26,6 +29,16 @@ class LLMConfig:
             "temperature": 0.7,
             "display_name": "通义千问 Qwen3"
         },
+        # 国内Gemini
+        LLMProvider.GEMINI_OPENAI: {
+            "class": ChatOpenAI,
+            "api_key_env": "GOOGLE_API_KEY",
+            "base_url": "https://spectacular-swan-be0181.netlify.app/edge",
+            "model_name": "gemini-2.0-flash",
+            "temperature": 0.7,
+            "display_name": "Google Gemini"
+        },
+        # 海外Gemini
         LLMProvider.GEMINI: {
             "class": ChatGoogleGenerativeAI,
             "api_key_env": "GOOGLE_API_KEY",
@@ -69,6 +82,15 @@ class LLMConfig:
                 model=config["model_name"],
                 temperature=config["temperature"]
             )
+        # 国内Gemini
+        elif provider == LLMProvider.GEMINI_OPENAI:
+            return llm_class(
+                api_key=api_key,
+                base_url=config["base_url"],
+                model=config["model_name"],
+                temperature=config["temperature"]
+            )
+        # 海外Gemini
         elif provider == LLMProvider.GEMINI:
             return llm_class(
                 google_api_key=api_key,
